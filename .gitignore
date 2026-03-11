@@ -1,0 +1,11 @@
+ui-service/target/
+biz-service/target/
+**/__pycache__/
+*.pyc
+.deploy-cache/
+deploy/compose/.env
+deploy/compose/.env.local
+deploy/compose/backups/
+deploy/compose/postgres/backup/*.sql
+deploy/compose/postgres/backup/*.dump
+deploy/compose/redis/backup/*.rdb

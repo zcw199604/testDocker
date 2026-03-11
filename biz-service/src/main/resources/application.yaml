@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: biz-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/bizdb}
+    username: ${SPRING_DATASOURCE_USERNAME:bizuser}
+    password: ${SPRING_DATASOURCE_PASSWORD:bizpass}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      initialization-fail-timeout: 0
+      connection-timeout: 3000
+      validation-timeout: 2000
+      maximum-pool-size: 5
+      minimum-idle: 0
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: 3s
+      connect-timeout: 3s
+  sql:
+    init:
+      mode: ${SPRING_SQL_INIT_MODE:never}
+      continue-on-error: false
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+      probes:
+        enabled: true
+  health:
+    db:
+      enabled: true
+    redis:
+      enabled: true
+
+info:
+  app:
+    name: biz-service
+    description: Spring Boot service sample with PostgreSQL and Redis dependency checks plus real read/write APIs.
