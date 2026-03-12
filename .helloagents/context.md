@@ -2,11 +2,13 @@
 
 ## 项目概览
 当前代码仓库的真实可运行产物由以下部分组成：
-- `biz-service/`：基于 Spring Boot 3.4.0、Java 21、Maven 的业务服务，已接入 PostgreSQL 与 Redis，并新增 autoscale 指标接口；
+- `biz-service/`：基于 Spring Boot 3.4.0、Java 21、Maven 的业务服务，已接入 PostgreSQL 与 Redis，并提供 autoscale 指标接口；
 - `ui-service/`：基于相同技术栈的前端交互服务；
-- `nginx/nginx.conf` + `nginx/generated/`：统一 HTTP 入口与动态 upstream 生成目录；
+- `nginx/nginx.legacy.conf`：旧版单机 5 服务入口使用的静态网关配置；
+- `nginx/nginx.conf` + `nginx/generated/`：autoscale 入口使用的动态 upstream 网关配置；
 - `autoscale-agent/`：基于 Python 3.12 的本地自动扩缩容协调器；
-- `docker-compose.yml`：当前唯一真实编排入口；
+- `docker-compose.yml`：旧版单机 5 服务入口；
+- `docker-compose.autoscale.yml`：本地自动扩缩容 6 服务入口；
 - `.helloagents/`：知识库、方案包与归档目录。
 
 ## 当前真实目录边界
@@ -14,54 +16,33 @@
 | --- | --- | --- | --- |
 | 应用层 | `biz-service` | `biz-service/` | 已落地 |
 | 应用层 | `ui-service` | `ui-service/` | 已落地 |
-| 网关层 | `nginx` | `nginx/nginx.conf`、`nginx/generated/` | 已落地 |
+| 网关层 | `nginx` | `nginx/nginx.legacy.conf`、`nginx/nginx.conf`、`nginx/generated/` | 已落地 |
 | 控制层 | `autoscale-agent` | `autoscale-agent/` | 已落地 |
-| 部署层 | Docker Compose | `docker-compose.yml` | 已落地 |
+| 部署层 | Docker Compose | `docker-compose.yml`、`docker-compose.autoscale.yml` | 已落地 |
 | 知识库 | HelloAGENTS KB | `.helloagents/` | 已落地 |
 | 历史规划 | Swarm / Prometheus / 旧监控方案 | `.helloagents/archive/`、旧模块文档 | 仅历史参考 |
 
 ## 已落地事实
-1. `docker-compose.yml` 当前定义 6 个服务：`postgres`、`redis`、`ui-service`、`biz-service`、`nginx`、`autoscale-agent`。
-2. `biz-service` 已移除固定 `container_name` 与宿主机 `8080:8080` 暴露，只通过 Compose 网络 `expose: 8080` 提供服务。
-3. `biz-service` 新增 `GET /api/autoscale/metrics`，返回 `serviceName`、`instanceId`、`status`、`startupCompleted`、`inflightRequests`、`windowRequestCount`、`windowErrorCount`、`requestRatePerSecond`、`averageResponseTimeMs`、`windowStartedAt`、`timestamp`。
-4. `biz-service` 通过 `AutoscaleMetricsFilter` 统计 `/api/*` 业务请求，并排除 `/api/health`、`/api/dependencies`、`/api/autoscale/metrics`。
-5. `biz-service` 已启用 graceful shutdown，`StartupState` 现在可以表达 `STARTING` / `READY` / `STOPPING` 生命周期状态。
-6. `nginx/nginx.conf` 当前在 `http {}` 中 `include /etc/nginx/generated/biz-service.upstream.inc;`，`/api/*` 通过 `biz_service_upstream` 代理到健康副本池。
-7. `nginx/generated/biz-service.upstream.inc` 由 `autoscale-agent` 原子写入，并在变更前后执行 `nginx -t` + `nginx -s reload`。
-8. `autoscale-agent` 当前采用“Compose 配置源 + Docker SDK 直控副本”的实现方式：读取 `docker-compose.yml` 中 `biz-service` 模板，使用 Docker Socket 直接创建 / 摘流 / 删除 managed 副本，而不是把 Compose 当作实时副本控制器。
-9. `autoscale-agent` 同时采集容器 CPU / 内存与业务指标 `requestRatePerSecond`、`inflightRequests`，当前阈值通过环境变量配置：
-   - `AUTOSCALE_POLL_INTERVAL_SECONDS=5`
-   - `AUTOSCALE_SCALE_UP_WINDOW=2`
-   - `AUTOSCALE_SCALE_DOWN_WINDOW=2`
-   - `AUTOSCALE_COOLDOWN_SECONDS=30`
-   - `AUTOSCALE_DRAIN_SECONDS=10`
-   - `AUTOSCALE_CPU_UP_THRESHOLD=70`
-   - `AUTOSCALE_CPU_DOWN_THRESHOLD=25`
-   - `AUTOSCALE_MEMORY_UP_THRESHOLD=80`
-   - `AUTOSCALE_MEMORY_DOWN_THRESHOLD=35`
-   - `AUTOSCALE_APP_METRIC_RULES=[{"name":"requestRatePerSecond","up":0.2,"down":0.02,"aggregation":"max"},{"name":"inflightRequests","up":2,"down":0,"aggregation":"max"}]`
-10. `biz-service` 当前在 Compose 中额外注入 `AUTOSCALE_METRICS_WINDOW_DURATION=15s`，用于本地弹性演练。
-11. `autoscale-agent` 代码已支持 `dry_run` 与 `failure_freeze` 配置解析，当前 Compose 默认未开启 `dry_run`，保持自动执行模式。
+1. 当前存在两套 Compose 入口：`docker-compose.yml` 与 `docker-compose.autoscale.yml`。二者共用 `name: testdocker`，并复用相同端口、服务名与部分固定容器名，属于替代关系，不建议同时启动。
+2. `docker-compose.yml` 当前定义 5 个服务：`postgres`、`redis`、`biz-service`、`ui-service`、`nginx`。
+3. 旧版 `docker-compose.yml` 中，`biz-service` 恢复了固定 `container_name: testdocker-biz-service-compose` 与宿主机端口 `8080:8080`。
+4. 旧版 `docker-compose.yml` 中，`nginx` 挂载 `./nginx/nginx.legacy.conf:/etc/nginx/nginx.conf:ro`；`nginx.legacy.conf` 静态定义 `biz_service_upstream`，`/api/*` 代理到 `http://biz_service_upstream`。
+5. `docker-compose.autoscale.yml` 当前定义 6 个服务：`postgres`、`redis`、`biz-service`、`ui-service`、`nginx`、`autoscale-agent`。
+6. autoscale 版中，`biz-service` 仅 `expose: 8080`，并带有 autoscale labels 与 `AUTOSCALE_METRICS_WINDOW_DURATION=15s`。
+7. autoscale 版中，`nginx` 挂载 `./nginx/nginx.conf` 与 `./nginx/generated`；`nginx.conf` 通过 `include /etc/nginx/generated/biz-service.upstream.inc;` 引入生成式 `biz_service_upstream`。
+8. `autoscale-agent` 当前采用“Compose 配置源 + Docker SDK 直控副本”的实现方式：容器内继续读取 `/workspace/docker-compose.yml`，但宿主机映射源文件已是 `./docker-compose.autoscale.yml`。
+9. `autoscale-agent` 不依赖 `docker-compose --scale` 做实时副本控制；Compose 只提供模板与默认环境配置，副本创建 / 摘流 / 删除由 Docker SDK 执行。
+10. `biz-service` 继续提供 `GET /api/health`、`GET /api/dependencies`、`GET /api/test`、PostgreSQL / Redis 读写接口，以及 `GET /api/autoscale/metrics`。
+11. `biz-service` 已启用 graceful shutdown；`StartupState` 当前可表达 `STARTING`、`READY`、`STOPPING` 生命周期状态。
 
 ## 验证事实
-1. `docker-compose config --services` 已确认当前编排包含 6 个服务：`postgres`、`redis`、`ui-service`、`biz-service`、`nginx`、`autoscale-agent`。
-2. `PYTHONPATH=/mnt/testDocker/autoscale-agent python3 -m unittest discover -s /mnt/testDocker/autoscale-agent/tests -v` 当前通过 8 个 Python 单元测试。
-3. `docker run --rm -v "/mnt/testDocker/biz-service:/workspace" -v "/tmp/m2-biz-service:/root/.m2" -w /workspace maven:3.9-eclipse-temurin-21 mvn test` 已通过。
-4. `docker-compose up -d --build` 后，`docker-compose ps` 显示 6 个服务均可正常运行，其中 `postgres`、`redis`、`biz-service`、`ui-service`、`nginx` 为 healthy，`autoscale-agent` 为持续运行状态。
-5. 已通过入口验证：
-   - `GET http://127.0.0.1/nginx/health` 返回 `ok`；
-   - `GET http://127.0.0.1/api/health` 返回业务服务健康与 PostgreSQL / Redis 依赖状态；
-   - `GET http://127.0.0.1/api/autoscale/metrics` 返回 autoscale 指标快照。
-6. 已完成两轮自动扩缩容联调：
-   - 2026-03-11 14:44:06 UTC 与 14:45:52 UTC，`autoscale-agent` 因 `requestRatePerSecond` 超阈值自动扩容；
-   - 2026-03-11 14:44:15 UTC 与 14:46:07 UTC，扩容副本健康通过后被写入 nginx upstream；
-   - 经 nginx 连续访问 `/api/autoscale/metrics`，观测到 2 个不同 `instanceId`，证明新副本已实际承接流量；
-   - 2026-03-11 14:44:39 UTC 与 14:46:31 UTC，`autoscale-agent` 先摘流、reload nginx、等待 drain，再自动缩容回落至单副本。
+1. `docker-compose -f docker-compose.yml config --services` 当前输出 5 个服务：`postgres`、`redis`、`biz-service`、`ui-service`、`nginx`。
+2. `docker-compose -f docker-compose.autoscale.yml config --services` 当前输出 6 个服务：`postgres`、`redis`、`biz-service`、`ui-service`、`nginx`、`autoscale-agent`。
 
 ## 历史规划说明
 - 旧知识库中关于 `deploy/swarm/`、Prometheus、旧 autoscaler 的表述来自先前方案包与规划沉淀。
-- 当前工作区真实落地的是基于 `docker-compose`、`nginx` 与 `autoscale-agent` 的本地自动扩缩容闭环，不包含 Swarm / Kubernetes / Prometheus 运行时。
-- 后续若切换到更重编排平台，应以当前落地代码为基线重新同步知识库，而不是直接沿用旧规划文字。
+- 当前工作区真实落地的是基于 `docker-compose`、`nginx` 与 `autoscale-agent` 的本地编排与自动扩缩容闭环，不包含 Swarm / Kubernetes / Prometheus 运行时。
+- 后续若继续演进更重编排平台，应以当前两套 Compose 入口的真实代码为基线重新同步知识库，而不是直接沿用旧规划文字。
 
 ## 关联决策
 - springboot-biz-service-bootstrap#D001：采用单服务 Spring Boot + 自定义健康接口 + Docker 多阶段构建初始化业务服务基线。

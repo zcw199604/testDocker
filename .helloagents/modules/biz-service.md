@@ -15,7 +15,7 @@
   - `GET /api/test`
   - `POST /api/pg/notes` / `GET /api/pg/notes/{id}` / `GET /api/pg/notes`
   - `POST /api/redis/kv` / `GET /api/redis/kv/{key}`
-- 本轮新增 `GET /api/autoscale/metrics`，返回 autoscale 所需滚动指标与实例标识。
+  - `GET /api/autoscale/metrics`
 - `AutoscaleMetricsFilter` 当前统计 `/api/*` 业务请求，并排除 `/api/health`、`/api/dependencies`、`/api/autoscale/metrics`，避免健康探针污染扩缩容判断。
 - `AutoscaleMetricsService` 当前维护 inflight 数、滚动窗口请求数、错误数、平均响应时间与 `requestRatePerSecond`。
 - `AutoscaleMetricsResponse` 当前输出：`serviceName`、`instanceId`、`status`、`startupCompleted`、`inflightRequests`、`windowRequestCount`、`windowErrorCount`、`requestRatePerSecond`、`averageResponseTimeMs`、`windowStartedAt`、`timestamp`。
@@ -25,13 +25,14 @@
   - `server.shutdown: graceful`
   - `spring.lifecycle.timeout-per-shutdown-phase`
   - `autoscale.metrics.window-duration`
-- Compose 场景下，`biz-service` 当前不对宿主机暴露 `8080`，只在容器网络内提供服务，由 nginx 统一代理。
+- 在 `docker-compose.yml` 中，`biz-service` 当前恢复固定 `container_name: testdocker-biz-service-compose`，并向宿主机暴露 `8080:8080`。
+- 在 `docker-compose.autoscale.yml` 中，`biz-service` 仅 `expose: 8080`，由 nginx 统一代理入口流量，并作为 `autoscale-agent` 的 seed 服务模板。
 
 ## 依赖关系
 - 构建依赖：Spring Boot 3.4.0、Java 21、Maven。
 - 运行依赖：PostgreSQL、Redis。
 - 扩缩容依赖：`autoscale-agent` 通过 `/api/health` 与 `/api/autoscale/metrics` 观测实例状态。
-- 网关依赖：由 nginx 的 `/api/*` 路由代理访问。
+- 网关依赖：两套 nginx 配置都保持 `/api/* -> biz_service_upstream`，但旧版 Compose 仍保留宿主机 `8080` 直连入口。
 
 ## 已验证结果
 - `mvn test`（通过 Maven 容器执行）已通过。

@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## [0.6.1] - 2026-03-12
+
+### 变更
+- **[deploy-compose]**: 将根目录编排拆分为 legacy 5 服务 `docker-compose.yml` 与 autoscale 6 服务 `docker-compose.autoscale.yml`，明确双入口运行边界 — by zcw
+  - 方案: [202603120228_compose-split-legacy-autoscale](archive/2026-03/202603120228_compose-split-legacy-autoscale/)
+  - 决策: compose-split-legacy-autoscale#D001,D003
+- **[nginx-gateway]**: 新增 `nginx/nginx.legacy.conf` 供旧版 5 服务使用，并保留 autoscale 动态 upstream 配置 — by zcw
+  - 方案: [202603120228_compose-split-legacy-autoscale](archive/2026-03/202603120228_compose-split-legacy-autoscale/)
+  - 决策: compose-split-legacy-autoscale#D002
+- **[autoscale-agent]**: autoscale 入口改为从 `docker-compose.autoscale.yml` 读取服务模板，但容器内固定路径仍保持 `/workspace/docker-compose.yml` — by zcw
+  - 方案: [202603120228_compose-split-legacy-autoscale](archive/2026-03/202603120228_compose-split-legacy-autoscale/)
+  - 决策: compose-split-legacy-autoscale#D003
+
 ## [0.6.0] - 2026-03-11
 
 ### 新增

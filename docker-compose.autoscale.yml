@@ -38,7 +38,6 @@ services:
     image: testdocker-biz-service:latest
     build:
       context: ./biz-service
-    container_name: testdocker-biz-service-compose
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,8 +50,16 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_SQL_INIT_MODE: always
-    ports:
-      - "8080:8080"
+      AUTOSCALE_METRICS_WINDOW_DURATION: 15s
+    expose:
+      - "8080"
+    labels:
+      io.testdocker.autoscale.role: seed
+      io.testdocker.autoscale.service-port: "8080"
+      io.testdocker.autoscale.health-path: /api/health
+      io.testdocker.autoscale.metrics-path: /api/autoscale/metrics
+      io.testdocker.autoscale.upstream-name: biz_service_upstream
+      io.testdocker.autoscale.seed-host: biz-service
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/api/health | grep '\"status\":\"UP\"' >/dev/null || exit 1"]
       interval: 15s
@@ -96,13 +103,50 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./nginx/nginx.legacy.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/generated:/etc/nginx/generated:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/nginx/health | grep 'ok' >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
       start_period: 10s
+
+  autoscale-agent:
+    image: testdocker-autoscale-agent:latest
+    build:
+      context: ./autoscale-agent
+    depends_on:
+      biz-service:
+        condition: service_healthy
+      nginx:
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      AUTOSCALE_COMPOSE_FILE: /workspace/docker-compose.yml
+      AUTOSCALE_GENERATED_DIR: /workspace/generated
+      AUTOSCALE_TARGET_SERVICE: biz-service
+      AUTOSCALE_NGINX_SERVICE: nginx
+      AUTOSCALE_MIN_REPLICAS: "1"
+      AUTOSCALE_MAX_REPLICAS: "4"
+      AUTOSCALE_POLL_INTERVAL_SECONDS: "5"
+      AUTOSCALE_SCALE_UP_WINDOW: "2"
+      AUTOSCALE_SCALE_DOWN_WINDOW: "2"
+      AUTOSCALE_COOLDOWN_SECONDS: "30"
+      AUTOSCALE_DRAIN_SECONDS: "10"
+      AUTOSCALE_STARTUP_TIMEOUT_SECONDS: "180"
+      AUTOSCALE_HTTP_TIMEOUT_SECONDS: "2.5"
+      AUTOSCALE_CPU_UP_THRESHOLD: "70"
+      AUTOSCALE_CPU_DOWN_THRESHOLD: "25"
+      AUTOSCALE_MEMORY_UP_THRESHOLD: "80"
+      AUTOSCALE_MEMORY_DOWN_THRESHOLD: "35"
+      AUTOSCALE_APP_METRIC_RULES: '[{"name":"requestRatePerSecond","up":0.2,"down":0.02,"aggregation":"max"},{"name":"inflightRequests","up":2,"down":0,"aggregation":"max"}]'
+      AUTOSCALE_DRY_RUN: "false"
+      AUTOSCALE_FAILURE_FREEZE: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker-compose.autoscale.yml:/workspace/docker-compose.yml:ro
+      - ./nginx/generated:/workspace/generated
 
 volumes:
   postgres_data:
