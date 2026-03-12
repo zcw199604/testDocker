@@ -1,6 +1,7 @@
 spring:
   application:
     name: biz-service
+    instance-id: ${SPRING_APPLICATION_INSTANCE_ID:${HOSTNAME:${random.uuid}}}
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/bizdb}
     username: ${SPRING_DATASOURCE_USERNAME:bizuser}
@@ -22,9 +23,12 @@ spring:
     init:
       mode: ${SPRING_SQL_INIT_MODE:never}
       continue-on-error: false
+  lifecycle:
+    timeout-per-shutdown-phase: ${SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE:20s}
 
 server:
   port: 8080
+  shutdown: graceful
 
 management:
   endpoints:
@@ -47,3 +51,7 @@ info:
   app:
     name: biz-service
     description: Spring Boot service sample with PostgreSQL and Redis dependency checks plus real read/write APIs.
+
+autoscale:
+  metrics:
+    window-duration: ${AUTOSCALE_METRICS_WINDOW_DURATION:60s}

@@ -57,6 +57,7 @@ class HealthControllerTest {
                 Instant.parse("2026-03-11T04:50:05Z"));
 
         given(startupState.isStartupCompleted()).willReturn(true);
+        given(startupState.isShuttingDown()).willReturn(false);
         given(startupState.getStartedAt()).willReturn(startedAt);
         given(startupState.getReadyAt()).willReturn(readyAt);
         given(startupState.getUptime()).willReturn(Duration.ofSeconds(12));
@@ -72,5 +73,38 @@ class HealthControllerTest {
                 .andExpect(jsonPath("$.dependencies.redis.available").value(true))
                 .andExpect(jsonPath("$.startedAt").exists())
                 .andExpect(jsonPath("$.timestamp").exists());
+    }
+
+    /**
+     * Verifies shutdown state is surfaced for draining and scale-in control.
+     *
+     * @throws Exception when the request fails.
+     */
+    @Test
+    void shouldReturnStoppingDuringShutdown() throws Exception {
+        DependenciesResponse dependencies = new DependenciesResponse(
+                "UP",
+                new DependencyStatus(
+                        "postgres",
+                        true,
+                        "PostgreSQL connection is available.",
+                        Map.of("database", "bizdb")),
+                new DependencyStatus(
+                        "redis",
+                        true,
+                        "Redis connection is available.",
+                        Map.of("ping", "PONG")),
+                Instant.parse("2026-03-11T04:50:05Z"));
+
+        given(startupState.isStartupCompleted()).willReturn(true);
+        given(startupState.isShuttingDown()).willReturn(true);
+        given(startupState.getStartedAt()).willReturn(Instant.parse("2026-03-11T04:50:00Z"));
+        given(startupState.getReadyAt()).willReturn(Instant.parse("2026-03-11T04:50:03Z"));
+        given(startupState.getUptime()).willReturn(Duration.ofSeconds(12));
+        given(dependencyStatusService.inspectDependencies()).willReturn(dependencies);
+
+        mockMvc.perform(get("/api/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("STOPPING"));
     }
 }

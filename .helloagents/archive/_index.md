@@ -6,6 +6,7 @@
 
 | 时间戳 | 名称 | 类型 | 涉及模块 | 决策 | 结果 |
 |--------|------|------|---------|------|------|
+| 202603111405 | compose-biz-service-autoscale | implementation | deploy-compose, nginx-gateway, biz-service, autoscale-agent | compose-biz-service-autoscale#D001,D002,D003 | ✅完成 |
 | 202603110444 | biz-service-pg-redis-compose | - | - | - | ⏸未执行 |
 | 202603110911 | ui-biz-nginx-compose-gateway | implementation | ui-service, nginx-gateway, deploy-compose | ui-biz-nginx-compose-gateway#D001,D002 | ✅完成 |
 | 202603110540 | biz-service-real-readwrite | implementation | biz-service | biz-service-real-readwrite#D001 | ✅完成 |
@@ -16,6 +17,7 @@
 ## 按月归档
 
 ### 2026-03
+- [202603111405_compose-biz-service-autoscale](./2026-03/202603111405_compose-biz-service-autoscale/) - 在当前 docker-compose 基线上落地 biz-service 自动扩缩容、nginx 动态 upstream 与 autoscale-agent
 - [202603110444_biz-service-pg-redis-compose](./2026-03/202603110444_biz-service-pg-redis-compose/) - 历史遗留草稿方案包，已按未执行状态清理归档
 - [202603110911_ui-biz-nginx-compose-gateway](./2026-03/202603110911_ui-biz-nginx-compose-gateway/) - 新增 ui-service 与 nginx，并扩展 docker-compose 为五服务编排
 - [202603110540_biz-service-real-readwrite](./2026-03/202603110540_biz-service-real-readwrite/) - 为 PostgreSQL notes 与 Redis KV 新增真实写读接口并完成联调验证

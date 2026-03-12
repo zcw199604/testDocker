@@ -4,31 +4,38 @@
 - `docker-compose.yml`
 
 ## 当前事实
-- 当前工作区已存在一个根目录 `docker-compose.yml`，这是项目当前真实可用的 Compose 编排基线。
-- Compose 当前包含 5 个核心服务：`postgres`、`redis`、`biz-service`、`ui-service`、`nginx`。
-- PostgreSQL 基线镜像为 `postgres:16-alpine`，默认使用 `bizdb` / `bizuser`，通过命名卷 `postgres_data` 持久化数据，并使用 `pg_isready` 进行健康检查。
-- Redis 基线镜像为 `redis:7.4-alpine`，以 `redis-server --appendonly yes` 启动，通过命名卷 `redis_data` 持久化数据，并使用 `redis-cli ping` 进行健康检查。
-- `biz-service` 从本地 `./biz-service` Dockerfile 构建，暴露宿主机端口 `8080`，并通过环境变量连接 PostgreSQL 与 Redis。
-- `ui-service` 从本地 `./ui-service` Dockerfile 构建，暴露宿主机端口 `8081`，并通过环境变量连接 PostgreSQL 与 Redis。
-- Compose 为 `biz-service` 与 `ui-service` 都注入 `SPRING_SQL_INIT_MODE=always`，分别用于自动初始化 `notes` 与 `ui_preferences` 相关表结构。
-- `biz-service` 与 `ui-service` 都依赖 `postgres` 与 `redis` 的健康状态；只有当两者健康后，应用容器才会启动。
-- `nginx` 使用 `nginx:alpine` 镜像，并依赖 `biz-service` 与 `ui-service` 的健康状态后再启动。
-- `nginx` 通过只读挂载 `./nginx/nginx.conf` 作为运行配置，并通过 `GET /nginx/health` 做容器健康检查。
-- 当前联调验证结果显示 `postgres`、`redis`、`biz-service`、`ui-service`、`nginx` 均可达到 `healthy` 状态。
+- 当前工作区已存在一个根目录 `docker-compose.yml`，这是项目当前唯一真实可用的编排入口。
+- Compose 当前包含 6 个服务：`postgres`、`redis`、`ui-service`、`biz-service`、`nginx`、`autoscale-agent`。
+- PostgreSQL 基线镜像为 `postgres:16-alpine`，通过命名卷 `postgres_data` 持久化数据，并使用 `pg_isready` 健康检查。
+- Redis 基线镜像为 `redis:7.4-alpine`，通过命名卷 `redis_data` 持久化数据，并使用 `redis-cli ping` 健康检查。
+- `biz-service` 从 `./biz-service` 构建，当前不再暴露宿主机 `8080`，只通过 `expose: 8080` 供 Compose 网络访问。
+- `biz-service` 带有 autoscale 相关 labels：服务端口、健康路径、指标路径、upstream 名称与 seed host。
+- `biz-service` 当前额外注入 `AUTOSCALE_METRICS_WINDOW_DURATION=15s`，用于本地弹性演练。
+- `ui-service` 仍从 `./ui-service` 构建，对外暴露 `8081:8080`，职责边界未纳入本轮自动扩缩容对象。
+- `nginx` 挂载 `./nginx/nginx.conf` 与 `./nginx/generated`，其中 `generated` 目录用于接收 `autoscale-agent` 生成的 upstream include 文件。
+- `autoscale-agent` 从 `./autoscale-agent` 构建，挂载 Docker Socket、只读 Compose 文件与 `nginx/generated` 目录，不对外暴露宿主机端口。
+- `autoscale-agent` 当前通过环境变量配置 CPU / 内存阈值、业务指标阈值、poll interval、scale windows、cooldown 与 drain 窗口。
 
 ## 当前边界
-- 当前 Compose 基线聚焦本地开发与最小联调场景，已经覆盖 UI 服务、业务服务、数据库、缓存与统一入口网关。
-- 历史知识库中关于 Traefik、Swarm、Prometheus 或 autoscaler 等更大规模编排的描述，当前仅保留为规划参考，不是当前代码事实。
-- 如后续继续扩展更多服务，应以现有根目录 `docker-compose.yml` 为真实基线继续演进。
+- 当前部署基线仍是单机 `docker-compose`，未切换到 Swarm / Kubernetes。
+- Compose 在当前实现中承担“服务模板与拓扑配置源”职责；副本增删与健康入池逻辑由 `autoscale-agent` 负责，而不是由 Compose 原生执行自动扩缩容策略。
+- 数据层 `postgres`、`redis` 与交互层 `ui-service` 不参与本轮自动扩缩容。
 
-## 当前路由与端口
+## 当前端口与网络
 - 对外端口：
   - `80 -> nginx`
-  - `8080 -> biz-service`
   - `8081 -> ui-service`
   - `5432 -> postgres`
   - `6379 -> redis`
+- 仅内网暴露：
+  - `biz-service -> 8080/tcp`
+  - `autoscale-agent -> 无对外端口`
 - 当前代理规则：
-  - `/api/* -> biz-service:8080`
-  - `/ui-api/* -> ui-service:8080`
-  - `/ -> ui-service:8080`
+  - `/api/* -> biz_service_upstream`
+  - `/ui-api/* -> ui_service_upstream`
+  - `/ -> ui_service_upstream`
+
+## 已验证结果
+- `docker-compose config --services` 已验证 6 服务定义完整。
+- `docker-compose up -d --build` 已验证基础服务可拉起。
+- `docker-compose ps` 已验证 `postgres`、`redis`、`biz-service`、`ui-service`、`nginx` healthy，`autoscale-agent` 持续运行。

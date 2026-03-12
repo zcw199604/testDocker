@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## [0.6.0] - 2026-03-11
+
+### 新增
+- **[autoscale-agent]**: 新增基于 Python + Docker SDK 的本地自动扩缩容协调器，负责 `biz-service` 的指标采集、健康门禁、upstream 更新与摘流缩容 — by zcw
+  - 方案: [202603111405_compose-biz-service-autoscale](archive/2026-03/202603111405_compose-biz-service-autoscale/)
+  - 决策: compose-biz-service-autoscale#D001,D002,D003
+
+### 变更
+- **[deploy-compose]**: 根目录 `docker-compose.yml` 从 5 服务扩展为 6 服务编排，新增 `autoscale-agent`，并把 `biz-service` 改为仅暴露容器内 `8080` — by zcw
+  - 方案: [202603111405_compose-biz-service-autoscale](archive/2026-03/202603111405_compose-biz-service-autoscale/)
+  - 决策: compose-biz-service-autoscale#D001,D003
+- **[nginx-gateway]**: `/api/*` 从静态单实例代理重构为动态 `biz_service_upstream`，支持健康副本入池与缩容前摘流 — by zcw
+  - 方案: [202603111405_compose-biz-service-autoscale](archive/2026-03/202603111405_compose-biz-service-autoscale/)
+  - 决策: compose-biz-service-autoscale#D002
+- **[biz-service]**: 新增 `/api/autoscale/metrics`、graceful shutdown、instanceId 与生命周期状态输出，用于本地自动扩缩容闭环 — by zcw
+  - 方案: [202603111405_compose-biz-service-autoscale](archive/2026-03/202603111405_compose-biz-service-autoscale/)
+  - 决策: compose-biz-service-autoscale#D001,D003
+
 ## [0.5.0] - 2026-03-11
 
 ### 新增

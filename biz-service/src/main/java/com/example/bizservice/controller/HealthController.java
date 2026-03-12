@@ -59,6 +59,9 @@ public class HealthController {
     }
 
     private String resolveStatus(boolean startupCompleted, String dependencyStatus) {
+        if (startupState.isShuttingDown()) {
+            return "STOPPING";
+        }
         if (!startupCompleted) {
             return "STARTING";
         }
